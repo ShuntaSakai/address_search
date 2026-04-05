@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>郵便番号・住所検索</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="search-card" aria-labelledby="app-title">
+        <header class="card-header">
+          <h1 id="app-title">郵便番号・住所検索</h1>
+        </header>
+
+        <form id="search-form" class="search-form" novalidate>
+          <fieldset class="mode-switch" aria-label="検索モード">
+            <legend class="sr-only">検索モード</legend>
+            <label class="mode-option">
+              <input
+                type="radio"
+                name="searchMode"
+                value="postal"
+                checked
+              />
+              <span>郵便番号から探す</span>
+            </label>
+            <label class="mode-option">
+              <input type="radio" name="searchMode" value="address" />
+              <span>住所から探す</span>
+            </label>
+          </fieldset>
+
+          <div class="input-group">
+            <label id="input-label" for="search-input">郵便番号</label>
+            <input
+              id="search-input"
+              name="search"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              placeholder="郵便番号を入力"
+            />
+          </div>
+
+          <div class="action-row">
+            <button type="submit" class="button button-primary" id="search-button">
+              検索
+            </button>
+            <button type="button" class="button button-secondary" id="clear-button">
+              クリア
+            </button>
+          </div>
+        </form>
+
+        <p id="error-message" class="message message-error" aria-live="polite"></p>
+        <p id="copy-feedback" class="message message-feedback" aria-live="polite"></p>
+
+        <section id="result-section" class="result-section" aria-live="polite" aria-label="検索結果"></section>
+
+        <footer class="card-footer">
+        </footer>
+      </section>
+    </main>
+
+    <script src="main.js"></script>
+  </body>
+</html>
