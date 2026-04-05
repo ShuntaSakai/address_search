@@ -161,8 +161,9 @@ function formatLocation(item) {
   const city = String(item?.city || '').trim();
   const town = String(item?.town || '').trim();
   const prefectureKana = PREFECTURE_KANA_MAP[prefecture] || '';
-  const cityKana = String(item?.['city-kana'] || '').trim();
-  const townKana = String(item?.['town-kana'] || '').trim();
+  // HeartRails Geo API の実レスポンスは city_kana / town_kana。
+  const cityKana = String(item?.city_kana || item?.['city-kana'] || '').trim();
+  const townKana = String(item?.town_kana || item?.['town-kana'] || '').trim();
   const address = buildAddressText(prefecture, city, town);
   const addressKana = buildAddressKana(prefectureKana, cityKana, townKana);
 
