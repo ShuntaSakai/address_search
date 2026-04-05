@@ -10,12 +10,10 @@
 
 (() => {
   const API_CONFIG = {
-    baseUrl: 'https://geoapi.heartrails.com/api/json',
-    methods: {
-      postalSearch: 'searchByPostal',
-      addressSearch: 'suggest',
+    endpoints: {
+      postalSearch: '/api/postal-search',
+      addressSearch: '/api/address-search',
     },
-    addressMatching: 'like',
     timeoutMs: 10000,
   };
 
@@ -100,108 +98,6 @@
     return '';
   }
 
-  function buildAddressText(prefecture, city, town) {
-    return [prefecture, city, town]
-      .map((value) => String(value || '').trim())
-      .filter(Boolean)
-      .join('');
-  }
-
-  function buildJsonpUrl(params) {
-    const url = new URL(API_CONFIG.baseUrl);
-
-    Object.entries(params).forEach(([key, value]) => {
-      url.searchParams.set(key, value);
-    });
-
-    return url.toString();
-  }
-
-  function requestJsonp(params) {
-    return new Promise((resolve, reject) => {
-      const callbackName = `jsonpCallback_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-      const script = document.createElement('script');
-      const cleanup = () => {
-        if (script.parentNode) {
-          script.parentNode.removeChild(script);
-        }
-
-        delete window[callbackName];
-      };
-
-      const timeoutId = window.setTimeout(() => {
-        cleanup();
-        reject(new Error('timeout'));
-      }, API_CONFIG.timeoutMs);
-
-      window[callbackName] = (response) => {
-        window.clearTimeout(timeoutId);
-        cleanup();
-        resolve(response);
-      };
-
-      script.onerror = () => {
-        window.clearTimeout(timeoutId);
-        cleanup();
-        reject(new Error('network'));
-      };
-
-      script.src = buildJsonpUrl({ ...params, jsonp: callbackName });
-      document.body.appendChild(script);
-    });
-  }
-
-  async function fetchAddressByPostalCode(postalCode) {
-    const response = await requestJsonp({
-      method: API_CONFIG.methods.postalSearch,
-      postal: postalCode,
-    });
-
-    const locations = response?.response?.location;
-
-    if (!Array.isArray(locations)) {
-      throw new Error('invalid-response');
-    }
-
-    return locations.map(formatPostalApiItem);
-  }
-
-  async function fetchPostalCodesByAddress(address) {
-    const response = await requestJsonp({
-      method: API_CONFIG.methods.addressSearch,
-      matching: API_CONFIG.addressMatching,
-      keyword: address,
-    });
-
-    const locations = response?.response?.location;
-
-    if (!Array.isArray(locations)) {
-      throw new Error('invalid-response');
-    }
-
-    return locations.map(formatAddressApiItem);
-  }
-
-  function formatPostalApiItem(item) {
-    const zipCode = String(item?.postal || '');
-
-    return {
-      zipCode,
-      formattedZipCode: formatPostalCode(zipCode),
-      address: buildAddressText(item?.prefecture, item?.city, item?.town),
-    };
-  }
-
-  function formatAddressApiItem(item) {
-    const zipCode = String(item?.postal || '');
-
-    return {
-      zipCode,
-      formattedZipCode: formatPostalCode(zipCode),
-      address: buildAddressText(item?.prefecture, item?.city, item?.town),
-    };
-  }
-
   function escapeHtml(value) {
     return String(value)
       .replace(/&/g, '&amp;')
@@ -209,6 +105,73 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  async function requestJson(url, params = {}) {
+    const requestUrl = new URL(url, window.location.origin);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), API_CONFIG.timeoutMs);
+
+    Object.entries(params).forEach(([key, value]) => {
+      requestUrl.searchParams.set(key, value);
+    });
+
+    try {
+      const response = await fetch(requestUrl.toString(), {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+        },
+        signal: controller.signal,
+      });
+
+      let data;
+
+      try {
+        data = await response.json();
+      } catch (error) {
+        throw new Error('invalid-response');
+      }
+
+      if (!response.ok) {
+        const errorCode = typeof data?.error === 'string' ? data.error : 'network';
+        throw new Error(errorCode);
+      }
+
+      return data;
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error('network');
+      }
+
+      throw error;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
+  }
+
+  async function fetchAddressByPostalCode(postalCode) {
+    const response = await requestJson(API_CONFIG.endpoints.postalSearch, {
+      postalCode,
+    });
+
+    if (!Array.isArray(response?.results)) {
+      throw new Error('invalid-response');
+    }
+
+    return response.results;
+  }
+
+  async function fetchPostalCodesByAddress(address) {
+    const response = await requestJson(API_CONFIG.endpoints.addressSearch, {
+      address,
+    });
+
+    if (!Array.isArray(response?.results)) {
+      throw new Error('invalid-response');
+    }
+
+    return response.results;
   }
 
   function renderPostalResult(data) {
@@ -226,9 +189,9 @@
           </div>
         </div>
         <div class="copy-row">
-          <button type="button" class="copy-button" data-copy-type="postal" data-copy-value="${escapeHtml(data.formattedZipCode)}">郵便番号をコピー</button>
-          <button type="button" class="copy-button" data-copy-type="address" data-copy-value="${escapeHtml(data.address)}">住所をコピー</button>
-          <button type="button" class="copy-button" data-copy-type="both" data-copy-value="${escapeHtml(`${data.formattedZipCode} ${data.address}`)}">両方をコピー</button>
+          <button type="button" class="copy-button" data-copy-value="${escapeHtml(data.formattedZipCode)}">郵便番号をコピー</button>
+          <button type="button" class="copy-button" data-copy-value="${escapeHtml(data.address)}">住所をコピー</button>
+          <button type="button" class="copy-button" data-copy-value="${escapeHtml(`${data.formattedZipCode} ${data.address}`)}">両方をコピー</button>
         </div>
       </div>
     `;
@@ -246,9 +209,9 @@
               <span>${escapeHtml(item.address)}</span>
             </div>
             <div class="copy-row">
-              <button type="button" class="copy-button" data-copy-type="postal" data-copy-value="${escapeHtml(item.formattedZipCode)}">郵便番号をコピー</button>
-              <button type="button" class="copy-button" data-copy-type="address" data-copy-value="${escapeHtml(item.address)}">住所をコピー</button>
-              <button type="button" class="copy-button" data-copy-type="both" data-copy-value="${escapeHtml(`${item.formattedZipCode} ${item.address}`)}">両方をコピー</button>
+              <button type="button" class="copy-button" data-copy-value="${escapeHtml(item.formattedZipCode)}">郵便番号をコピー</button>
+              <button type="button" class="copy-button" data-copy-value="${escapeHtml(item.address)}">住所をコピー</button>
+              <button type="button" class="copy-button" data-copy-value="${escapeHtml(`${item.formattedZipCode} ${item.address}`)}">両方をコピー</button>
             </div>
           </article>
         `
@@ -298,6 +261,22 @@
 
   function clearResult() {
     elements.resultSection.innerHTML = '';
+  }
+
+  function getErrorMessage(error) {
+    const map = {
+      validation: '入力内容を確認してください',
+      'not-found': '見つかりませんでした',
+      'invalid-response': 'データを取得できませんでした',
+      network: '通信に失敗しました',
+      'method-not-allowed': 'データを取得できませんでした',
+    };
+
+    return map[error.message] || '通信に失敗しました';
+  }
+
+  function isNetlifyRuntimeAvailable() {
+    return window.location.protocol === 'http:' || window.location.protocol === 'https:';
   }
 
   async function copyText(text) {
@@ -385,10 +364,7 @@
 
       renderPostalResult(usableResults[0]);
     } catch (error) {
-      const message = error.message === 'invalid-response'
-        ? 'データを取得できませんでした'
-        : '通信に失敗しました';
-      renderStatus(message, 'error');
+      renderStatus(getErrorMessage(error), 'error');
     } finally {
       setLoadingState(false);
     }
@@ -422,10 +398,7 @@
 
       renderAddressResults(usableResults);
     } catch (error) {
-      const message = error.message === 'invalid-response'
-        ? 'データを取得できませんでした'
-        : '通信に失敗しました';
-      renderStatus(message, 'error');
+      renderStatus(getErrorMessage(error), 'error');
     } finally {
       setLoadingState(false);
     }
@@ -434,6 +407,12 @@
   async function handleSubmit(event) {
     event.preventDefault();
     clearCopyFeedback();
+
+    if (!isNetlifyRuntimeAvailable()) {
+      clearError();
+      renderStatus('この構成では Netlify 上の公開URL、または netlify dev で利用してください', 'error');
+      return;
+    }
 
     state.mode = getCurrentMode();
 
@@ -491,6 +470,10 @@
   function init() {
     updateModeUi(state.mode);
     bindEvents();
+
+    if (!isNetlifyRuntimeAvailable()) {
+      renderStatus('Netlify Functions 構成です。検索は公開URLまたは netlify dev で利用してください。');
+    }
   }
 
   init();
