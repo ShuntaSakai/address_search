@@ -186,6 +186,7 @@
           <div class="result-row">
             <span class="result-label">住所</span>
             <span class="result-value">${escapeHtml(data.address)}</span>
+            ${data.addressKana ? `<span class="result-kana">${escapeHtml(data.addressKana)}</span>` : ''}
           </div>
         </div>
         <div class="copy-row">
@@ -207,6 +208,7 @@
             <div class="result-item-head">
               <span class="result-value">${escapeHtml(item.formattedZipCode)}</span>
               <span>${escapeHtml(item.address)}</span>
+              ${item.addressKana ? `<span class="result-kana">${escapeHtml(item.addressKana)}</span>` : ''}
             </div>
             <div class="copy-row">
               <button type="button" class="copy-button" data-copy-value="${escapeHtml(item.formattedZipCode)}">郵便番号をコピー</button>

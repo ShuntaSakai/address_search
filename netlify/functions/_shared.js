@@ -3,6 +3,56 @@ const API_CONFIG = {
   timeoutMs: 10000,
 };
 
+const PREFECTURE_KANA_MAP = {
+  '北海道': 'ほっかいどう',
+  '青森県': 'あおもりけん',
+  '岩手県': 'いわてけん',
+  '宮城県': 'みやぎけん',
+  '秋田県': 'あきたけん',
+  '山形県': 'やまがたけん',
+  '福島県': 'ふくしまけん',
+  '茨城県': 'いばらきけん',
+  '栃木県': 'とちぎけん',
+  '群馬県': 'ぐんまけん',
+  '埼玉県': 'さいたまけん',
+  '千葉県': 'ちばけん',
+  '東京都': 'とうきょうと',
+  '神奈川県': 'かながわけん',
+  '新潟県': 'にいがたけん',
+  '富山県': 'とやまけん',
+  '石川県': 'いしかわけん',
+  '福井県': 'ふくいけん',
+  '山梨県': 'やまなしけん',
+  '長野県': 'ながのけん',
+  '岐阜県': 'ぎふけん',
+  '静岡県': 'しずおかけん',
+  '愛知県': 'あいちけん',
+  '三重県': 'みえけん',
+  '滋賀県': 'しがけん',
+  '京都府': 'きょうとふ',
+  '大阪府': 'おおさかふ',
+  '兵庫県': 'ひょうごけん',
+  '奈良県': 'ならけん',
+  '和歌山県': 'わかやまけん',
+  '鳥取県': 'とっとりけん',
+  '島根県': 'しまねけん',
+  '岡山県': 'おかやまけん',
+  '広島県': 'ひろしまけん',
+  '山口県': 'やまぐちけん',
+  '徳島県': 'とくしまけん',
+  '香川県': 'かがわけん',
+  '愛媛県': 'えひめけん',
+  '高知県': 'こうちけん',
+  '福岡県': 'ふくおかけん',
+  '佐賀県': 'さがけん',
+  '長崎県': 'ながさきけん',
+  '熊本県': 'くまもとけん',
+  '大分県': 'おおいたけん',
+  '宮崎県': 'みやざきけん',
+  '鹿児島県': 'かごしまけん',
+  '沖縄県': 'おきなわけん',
+};
+
 function normalizeText(input) {
   return String(input || '')
     .replace(/\u3000/g, ' ')
@@ -30,6 +80,13 @@ function formatPostalCode(postalCode) {
 
 function buildAddressText(prefecture, city, town) {
   return [prefecture, city, town]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .join('');
+}
+
+function buildAddressKana(prefectureKana, cityKana, townKana) {
+  return [prefectureKana, cityKana, townKana]
     .map((value) => String(value || '').trim())
     .filter(Boolean)
     .join('');
@@ -100,12 +157,26 @@ function extractLocations(response) {
 
 function formatLocation(item) {
   const zipCode = String(item?.postal || '');
-  const address = buildAddressText(item?.prefecture, item?.city, item?.town);
+  const prefecture = String(item?.prefecture || '').trim();
+  const city = String(item?.city || '').trim();
+  const town = String(item?.town || '').trim();
+  const prefectureKana = PREFECTURE_KANA_MAP[prefecture] || '';
+  const cityKana = String(item?.['city-kana'] || '').trim();
+  const townKana = String(item?.['town-kana'] || '').trim();
+  const address = buildAddressText(prefecture, city, town);
+  const addressKana = buildAddressKana(prefectureKana, cityKana, townKana);
 
   return {
     zipCode,
     formattedZipCode: formatPostalCode(zipCode),
+    prefecture,
+    city,
+    town,
+    prefectureKana,
+    cityKana,
+    townKana,
     address,
+    addressKana,
   };
 }
 

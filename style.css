@@ -249,6 +249,13 @@ h1 {
   word-break: break-word;
 }
 
+.result-kana {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
 .result-list {
   display: grid;
   gap: 10px;
