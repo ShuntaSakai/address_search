@@ -10,19 +10,6 @@
 - JSONP は使用しない
 - 公開時は Netlify にそのまま載せられる
 
-## この構成にした理由
-
-以前の実装では JSONP で外部 API を呼んでいましたが、JSONP は外部サイトの JavaScript を自サイト上で実行する構成になるため、静的公開サイトとしては避けたい方式です。
-
-この版では以下の形に変更しています。
-
-- ブラウザは自サイトの `/api/*` だけを呼ぶ
-- Netlify Functions が外部 API を取得する
-- 外部 API のレスポンスは Function 側で検証・整形する
-- ブラウザには整形済み JSON だけを返す
-
-これにより、ブラウザ側で外部スクリプトを実行するリスクを避けています。
-
 ## ファイル構成
 
 ```text
@@ -129,15 +116,6 @@ address_search/
 - Netlify Functions
 - HeartRails Geo API
 
-## リクエストの流れ
-
-1. ブラウザで検索実行
-2. `main.js` が `/api/postal-search` または `/api/address-search` を呼ぶ
-3. `netlify.toml` のリダイレクトで Netlify Function に転送
-4. Function が HeartRails Geo API へサーバー側からアクセス
-5. Function がレスポンスを検証・整形して JSON を返す
-6. フロントエンドが結果を表示
-
 ## API エンドポイント
 
 ブラウザ側が呼ぶパス:
@@ -149,49 +127,6 @@ Netlify 上では以下の Functions に転送されます。
 
 - `netlify/functions/postal-search.js`
 - `netlify/functions/address-search.js`
-
-## 役割分担
-
-### フロントエンド
-
-- `main.js`
-- 入力整形
-- バリデーション
-- Function 呼び出し
-- 結果描画
-- コピー処理
-
-### サーバー側
-
-- `netlify/functions/_shared.js`
-- 外部 API 呼び出し
-- 入力の再検証
-- レスポンス検証
-- 表示用データへの整形
-
-## 主な関数
-
-### フロント側
-
-- `normalizePostalCode(input)`
-- `formatPostalCode(postalCode)`
-- `normalizeText(input)`
-- `validatePostalCode(postalCode)`
-- `fetchAddressByPostalCode(postalCode)`
-- `fetchPostalCodesByAddress(address)`
-- `renderPostalResult(data)`
-- `renderAddressResults(list)`
-- `renderError(message)`
-- `clearResult()`
-- `copyText(text)`
-
-### Function 側
-
-- `fetchUpstream(params)`
-- `extractLocations(response)`
-- `formatLocation(item)`
-- `deduplicateResults(results)`
-- `createJsonResponse(statusCode, payload)`
 
 ## セキュリティ方針
 
@@ -206,11 +141,6 @@ Netlify 上では以下の Functions に転送されます。
   - `X-Frame-Options`
   - `Referrer-Policy`
   - `Permissions-Policy`
-
-### 残る前提
-
-- Function からの外部 API 利用は継続するため、上流 API の停止や仕様変更の影響は受けます
-- 高い可用性が必要なら、将来的には独自データソースやキャッシュ層も検討できます
 
 ## エラー表示
 
@@ -231,49 +161,6 @@ Netlify 上では以下の Functions に転送されます。
 - `通信に失敗しました`
 - `データを取得できませんでした`
 
-## ローカルでの確認方法
-
-この版は Netlify Functions 前提なので、単に `index.html` を `file://` で開くだけでは検索 API は動きません。
-
-### 方法 1: Netlify にデプロイして確認
-
-最も簡単です。
-
-1. Netlify にサイトを作成
-2. このディレクトリをデプロイ
-3. 発行された URL で動作確認
-
-### 方法 2: Netlify Dev で確認
-
-Netlify CLI を使う方法です。
-
-```bash
-netlify dev
-```
-
-起動後、表示されたローカル URL をブラウザで開いて確認します。
-
-## 公開方法
-
-Netlify にそのまま載せられます。
-
-### 例
-
-1. GitHub に push
-2. Netlify でリポジトリを連携
-3. デプロイ
-4. 発行された URL をメールや LINE で共有
-
-## API 差し替え箇所
-
-将来的に外部 API を差し替える場合は、主に以下を変更します。
-
-- `netlify/functions/_shared.js`
-- `netlify/functions/postal-search.js`
-- `netlify/functions/address-search.js`
-
-フロント側は `/api/postal-search` と `/api/address-search` の JSON 形式だけを見ているため、Function 側で吸収しやすい構成です。
-
 ## データ出典
 
 出典: 「位置参照情報ダウンロードサービス」（国土交通省）を加工して作成
@@ -284,5 +171,4 @@ Netlify にそのまま載せられます。
 - レート制限
 - ログ記録
 - 住所検索の完全一致 / 部分一致切り替え
-- 独自データソースへの移行
 - よく使う住所の保存
