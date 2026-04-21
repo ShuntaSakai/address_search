@@ -37,6 +37,9 @@
   const state = {
     mode: 'postal',
     feedbackTimerId: null,
+    inputTimerId: null,
+    liveSearchRequestId: 0,
+    liveSearchAbortController: null,
   };
 
   const elements = {
@@ -46,9 +49,17 @@
     modeInputs: document.querySelectorAll('input[name="searchMode"]'),
     searchButton: document.getElementById('search-button'),
     clearButton: document.getElementById('clear-button'),
+    suggestionSection: document.getElementById('suggestion-section'),
     resultSection: document.getElementById('result-section'),
     errorMessage: document.getElementById('error-message'),
     copyFeedback: document.getElementById('copy-feedback'),
+  };
+
+  const LIVE_SEARCH_CONFIG = {
+    addressMinLength: 3,
+    postalLength: 7,
+    debounceMs: 250,
+    maxSuggestions: 8,
   };
 
   function normalizeText(input) {
@@ -99,10 +110,11 @@
       .replace(/'/g, '&#39;');
   }
 
-  async function requestJson(url, params = {}) {
+  async function requestJson(url, params = {}, options = {}) {
     const requestUrl = new URL(url, window.location.origin);
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), API_CONFIG.timeoutMs);
+    const cleanupExternalAbort = bindAbortSignal(options.signal, controller);
 
     Object.entries(params).forEach(([key, value]) => {
       requestUrl.searchParams.set(key, value);
@@ -133,13 +145,36 @@
       return data;
     } catch (error) {
       if (error.name === 'AbortError') {
+        if (options.signal?.aborted) {
+          throw error;
+        }
+
         throw new Error('network');
       }
 
       throw error;
     } finally {
+      cleanupExternalAbort();
       window.clearTimeout(timeoutId);
     }
+  }
+
+  function bindAbortSignal(signal, controller) {
+    if (!signal) {
+      return () => {};
+    }
+
+    if (signal.aborted) {
+      controller.abort();
+      return () => {};
+    }
+
+    const abortHandler = () => controller.abort();
+    signal.addEventListener('abort', abortHandler, { once: true });
+
+    return () => {
+      signal.removeEventListener('abort', abortHandler);
+    };
   }
 
   async function fetchAddressByPostalCode(postalCode) {
@@ -154,10 +189,10 @@
     return response.results;
   }
 
-  async function fetchPostalCodesByAddress(address) {
+  async function fetchPostalCodesByAddress(address, options = {}) {
     const response = await requestJson(API_CONFIG.endpoints.addressSearch, {
       address,
-    });
+    }, options);
 
     if (!Array.isArray(response?.results)) {
       throw new Error('invalid-response');
@@ -226,6 +261,52 @@
     `;
   }
 
+  function renderSuggestions(list, keyword) {
+    if (!list.length) {
+      elements.suggestionSection.innerHTML = `
+        <div class="suggestion-panel">
+          <p class="suggestion-label">候補</p>
+          <div class="suggestion-empty">${escapeHtml(`「${keyword}」に一致する候補はありません`)}</div>
+        </div>
+      `;
+      return;
+    }
+
+    const itemsHtml = list
+      .map(
+        (item, index) => `
+          <button
+            type="button"
+            class="suggestion-item"
+            data-suggestion-index="${index}"
+          >
+            <span class="suggestion-item-head">
+              <span class="result-value">${escapeHtml(item.address)}</span>
+              <span>${escapeHtml(item.formattedZipCode)}</span>
+              ${item.addressKana ? `<span class="result-kana">${escapeHtml(item.addressKana)}</span>` : ''}
+            </span>
+          </button>
+        `
+      )
+      .join('');
+
+    elements.suggestionSection.innerHTML = `
+      <div class="suggestion-panel">
+        <p class="suggestion-label">候補</p>
+        <div class="suggestion-list">${itemsHtml}</div>
+      </div>
+    `;
+  }
+
+  function renderSuggestionLoading() {
+    elements.suggestionSection.innerHTML = `
+      <div class="suggestion-panel">
+        <p class="suggestion-label">候補</p>
+        <div class="suggestion-loading">候補を検索しています...</div>
+      </div>
+    `;
+  }
+
   function renderError(message) {
     elements.errorMessage.textContent = message;
   }
@@ -255,6 +336,11 @@
 
   function clearResult() {
     elements.resultSection.innerHTML = '';
+  }
+
+  function clearSuggestions() {
+    elements.suggestionSection.innerHTML = '';
+    elements.suggestionSection.removeAttribute('data-suggestions');
   }
 
   function getErrorMessage(error) {
@@ -298,6 +384,24 @@
   function setLoadingState(isLoading) {
     elements.searchButton.disabled = isLoading;
     elements.searchButton.textContent = isLoading ? '検索中...' : SEARCH_MODES[state.mode].buttonLabel;
+  }
+
+  function clearInputTimer() {
+    if (!state.inputTimerId) {
+      return;
+    }
+
+    window.clearTimeout(state.inputTimerId);
+    state.inputTimerId = null;
+  }
+
+  function cancelLiveSearch() {
+    clearInputTimer();
+
+    if (state.liveSearchAbortController) {
+      state.liveSearchAbortController.abort();
+      state.liveSearchAbortController = null;
+    }
   }
 
   function updateModeUi(mode) {
@@ -398,8 +502,44 @@
     }
   }
 
+  async function handleAddressInputSearch(keyword, requestId) {
+    cancelLiveSearch();
+    const abortController = new AbortController();
+    state.liveSearchAbortController = abortController;
+    renderSuggestionLoading();
+
+    try {
+      const results = await fetchPostalCodesByAddress(keyword, {
+        signal: abortController.signal,
+      });
+
+      if (requestId !== state.liveSearchRequestId) {
+        return;
+      }
+
+      const usableResults = deduplicateResults(
+        results.filter((item) => item.zipCode && item.address)
+      ).slice(0, LIVE_SEARCH_CONFIG.maxSuggestions);
+
+      elements.suggestionSection.dataset.suggestions = JSON.stringify(usableResults);
+      renderSuggestions(usableResults, keyword);
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
+
+      clearSuggestions();
+    } finally {
+      if (state.liveSearchAbortController === abortController) {
+        state.liveSearchAbortController = null;
+      }
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
+    cancelLiveSearch();
+    clearSuggestions();
     clearCopyFeedback();
 
     if (!isNetlifyRuntimeAvailable()) {
@@ -419,21 +559,120 @@
   }
 
   function handleModeChange(event) {
+    cancelLiveSearch();
     state.mode = event.target.value;
     updateModeUi(state.mode);
     elements.input.value = '';
     clearError();
     clearResult();
+    clearSuggestions();
     clearCopyFeedback();
     elements.input.focus();
   }
 
   function handleClear() {
+    cancelLiveSearch();
     elements.input.value = '';
     clearError();
     clearResult();
+    clearSuggestions();
     clearCopyFeedback();
     elements.input.focus();
+  }
+
+  function handleInput() {
+    clearCopyFeedback();
+
+    if (state.mode === 'postal') {
+      const normalizedPostalCode = normalizePostalCode(elements.input.value);
+
+      cancelLiveSearch();
+      clearSuggestions();
+
+      if (!normalizedPostalCode) {
+        clearError();
+        clearResult();
+        return;
+      }
+
+      if (normalizedPostalCode.length < LIVE_SEARCH_CONFIG.postalLength) {
+        clearError();
+        clearResult();
+        return;
+      }
+
+      if (!isNetlifyRuntimeAvailable()) {
+        return;
+      }
+
+      clearError();
+      state.inputTimerId = window.setTimeout(() => {
+        state.inputTimerId = null;
+        handlePostalSearch();
+      }, LIVE_SEARCH_CONFIG.debounceMs);
+      return;
+    }
+
+    if (state.mode !== 'address') {
+      cancelLiveSearch();
+      clearSuggestions();
+      return;
+    }
+
+    const normalizedAddress = normalizeText(elements.input.value);
+
+    if (!normalizedAddress) {
+      clearError();
+      clearResult();
+      cancelLiveSearch();
+      clearSuggestions();
+      return;
+    }
+
+    if (normalizedAddress.length < LIVE_SEARCH_CONFIG.addressMinLength) {
+      clearError();
+      clearResult();
+      cancelLiveSearch();
+      clearSuggestions();
+      return;
+    }
+
+    if (!isNetlifyRuntimeAvailable()) {
+      clearSuggestions();
+      return;
+    }
+
+    clearError();
+    clearResult();
+    clearInputTimer();
+    state.liveSearchRequestId += 1;
+    const requestId = state.liveSearchRequestId;
+
+    state.inputTimerId = window.setTimeout(() => {
+      state.inputTimerId = null;
+      handleAddressInputSearch(normalizedAddress, requestId);
+    }, LIVE_SEARCH_CONFIG.debounceMs);
+  }
+
+  function handleSuggestionClick(event) {
+    const button = event.target.closest('[data-suggestion-index]');
+
+    if (!button) {
+      return;
+    }
+
+    const suggestions = JSON.parse(elements.suggestionSection.dataset.suggestions || '[]');
+    const selected = suggestions[Number(button.dataset.suggestionIndex)];
+
+    if (!selected) {
+      return;
+    }
+
+    cancelLiveSearch();
+    elements.input.value = selected.address;
+    clearSuggestions();
+    clearError();
+    renderAddressResults([selected]);
   }
 
   async function handleResultClick(event) {
@@ -454,6 +693,8 @@
   function bindEvents() {
     elements.form.addEventListener('submit', handleSubmit);
     elements.clearButton.addEventListener('click', handleClear);
+    elements.input.addEventListener('input', handleInput);
+    elements.suggestionSection.addEventListener('click', handleSuggestionClick);
     elements.resultSection.addEventListener('click', handleResultClick);
 
     elements.modeInputs.forEach((input) => {
