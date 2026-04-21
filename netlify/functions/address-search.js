@@ -4,8 +4,6 @@ const {
   extractLocations,
   fetchUpstream,
   formatLocation,
-  isAddressQueryLongEnough,
-  limitResults,
   normalizeText,
 } = require('./_shared');
 
@@ -17,11 +15,7 @@ exports.handler = async (event) => {
   const address = normalizeText(event.queryStringParameters?.address);
 
   if (!address) {
-    return createJsonResponse(400, { error: 'validation', results: [] });
-  }
-
-  if (!isAddressQueryLongEnough(address)) {
-    return createJsonResponse(200, { results: [], error: 'query-too-short' });
+    return createJsonResponse(400, { error: 'validation' });
   }
 
   try {
@@ -31,8 +25,8 @@ exports.handler = async (event) => {
       keyword: address,
     });
 
-    const results = limitResults(
-      deduplicateResults(extractLocations(upstreamData).map(formatLocation))
+    const results = deduplicateResults(
+      extractLocations(upstreamData).map(formatLocation)
     );
 
     if (!results.length) {
@@ -41,6 +35,7 @@ exports.handler = async (event) => {
 
     return createJsonResponse(200, { results });
   } catch (error) {
-    return createJsonResponse(502, { error: error.message || 'network', results: [] });
+    const statusCode = error.message === 'invalid-response' ? 502 : 502;
+    return createJsonResponse(statusCode, { error: error.message || 'network' });
   }
 };
