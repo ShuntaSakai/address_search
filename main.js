@@ -70,14 +70,6 @@
     return halfWidth.replace(/[^0-9]/g, '');
   }
 
-  function formatPostalCode(postalCode) {
-    if (!/^\d{7}$/.test(postalCode)) {
-      return postalCode;
-    }
-
-    return `${postalCode.slice(0, 3)}-${postalCode.slice(3)}`;
-  }
-
   function validatePostalCode(postalCode) {
     if (!postalCode) {
       return '郵便番号を入力してください';
@@ -190,9 +182,9 @@
           </div>
         </div>
         <div class="copy-row">
-          <button type="button" class="copy-button" data-copy-value="${escapeHtml(data.formattedZipCode)}">郵便番号をコピー</button>
+          <button type="button" class="copy-button" data-copy-value="${escapeHtml(data.zipCode)}">郵便番号をコピー</button>
           <button type="button" class="copy-button" data-copy-value="${escapeHtml(data.address)}">住所をコピー</button>
-          <button type="button" class="copy-button" data-copy-value="${escapeHtml(`${data.formattedZipCode} ${data.address}`)}">両方をコピー</button>
+          <button type="button" class="copy-button" data-copy-value="${escapeHtml(`${data.zipCode} ${data.address}`)}">両方をコピー</button>
         </div>
       </div>
     `;
@@ -211,9 +203,9 @@
               ${item.addressKana ? `<span class="result-kana">${escapeHtml(item.addressKana)}</span>` : ''}
             </div>
             <div class="copy-row">
-              <button type="button" class="copy-button" data-copy-value="${escapeHtml(item.formattedZipCode)}">郵便番号をコピー</button>
+              <button type="button" class="copy-button" data-copy-value="${escapeHtml(item.zipCode)}">郵便番号をコピー</button>
               <button type="button" class="copy-button" data-copy-value="${escapeHtml(item.address)}">住所をコピー</button>
-              <button type="button" class="copy-button" data-copy-value="${escapeHtml(`${item.formattedZipCode} ${item.address}`)}">両方をコピー</button>
+              <button type="button" class="copy-button" data-copy-value="${escapeHtml(`${item.zipCode} ${item.address}`)}">両方をコピー</button>
             </div>
           </article>
         `
