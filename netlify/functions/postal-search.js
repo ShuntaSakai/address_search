@@ -4,6 +4,8 @@ const {
   extractLocations,
   fetchUpstream,
   formatLocation,
+  isPostalQueryLongEnough,
+  limitResults,
   normalizePostalCode,
 } = require('./_shared');
 
@@ -14,18 +16,25 @@ exports.handler = async (event) => {
 
   const postalCode = normalizePostalCode(event.queryStringParameters?.postalCode);
 
-  if (!postalCode || !/^\d{7}$/.test(postalCode)) {
-    return createJsonResponse(400, { error: 'validation' });
+  if (!postalCode) {
+    return createJsonResponse(400, { error: 'validation', results: [] });
+  }
+
+  if (!isPostalQueryLongEnough(postalCode)) {
+    return createJsonResponse(200, { results: [], error: 'query-too-short' });
   }
 
   try {
     const upstreamData = await fetchUpstream({
-      method: 'searchByPostal',
-      postal: postalCode,
+      method: 'suggest',
+      matching: 'like',
+      keyword: postalCode,
     });
 
-    const results = deduplicateResults(
-      extractLocations(upstreamData).map(formatLocation)
+    const results = limitResults(
+      deduplicateResults(extractLocations(upstreamData).map(formatLocation)).filter((item) =>
+        item.zipCode.startsWith(postalCode)
+      )
     );
 
     if (!results.length) {
@@ -34,7 +43,6 @@ exports.handler = async (event) => {
 
     return createJsonResponse(200, { results });
   } catch (error) {
-    const statusCode = error.message === 'invalid-response' ? 502 : 502;
-    return createJsonResponse(statusCode, { error: error.message || 'network' });
+    return createJsonResponse(502, { error: error.message || 'network', results: [] });
   }
 };

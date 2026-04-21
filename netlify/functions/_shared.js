@@ -1,6 +1,9 @@
 const API_CONFIG = {
   baseUrl: 'https://geoapi.heartrails.com/api/json',
   timeoutMs: 10000,
+  suggestionLimit: 10,
+  postalMinLength: 3,
+  addressMinLength: 2,
 };
 
 const PREFECTURE_KANA_MAP = {
@@ -161,7 +164,6 @@ function formatLocation(item) {
   const city = String(item?.city || '').trim();
   const town = String(item?.town || '').trim();
   const prefectureKana = PREFECTURE_KANA_MAP[prefecture] || '';
-  // HeartRails Geo API の実レスポンスは city_kana / town_kana。
   const cityKana = String(item?.city_kana || item?.['city-kana'] || '').trim();
   const townKana = String(item?.town_kana || item?.['town-kana'] || '').trim();
   const address = buildAddressText(prefecture, city, town);
@@ -196,6 +198,18 @@ function deduplicateResults(results) {
   });
 }
 
+function limitResults(results, limit = API_CONFIG.suggestionLimit) {
+  return results.slice(0, Math.max(1, Number(limit) || API_CONFIG.suggestionLimit));
+}
+
+function isPostalQueryLongEnough(postalCode) {
+  return normalizePostalCode(postalCode).length >= API_CONFIG.postalMinLength;
+}
+
+function isAddressQueryLongEnough(address) {
+  return normalizeText(address).length >= API_CONFIG.addressMinLength;
+}
+
 module.exports = {
   API_CONFIG,
   createJsonResponse,
@@ -203,6 +217,9 @@ module.exports = {
   extractLocations,
   fetchUpstream,
   formatLocation,
+  isAddressQueryLongEnough,
+  isPostalQueryLongEnough,
+  limitResults,
   normalizePostalCode,
   normalizeText,
 };

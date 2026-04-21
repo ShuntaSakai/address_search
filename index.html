@@ -33,33 +33,74 @@
 
           <div class="input-group">
             <label id="input-label" for="search-input">郵便番号</label>
-            <input
-              id="search-input"
-              name="search"
-              type="text"
-              inputmode="numeric"
-              autocomplete="off"
-              placeholder="郵便番号を入力"
-            />
+            <div class="input-shell">
+              <input
+                id="search-input"
+                name="search"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="郵便番号を入力"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                aria-controls="suggestions-panel"
+                aria-activedescendant=""
+              />
+              <div
+                id="suggestion-status"
+                class="suggestion-status"
+                aria-live="polite"
+              ></div>
+              <section
+                id="suggestions-panel"
+                class="suggestions-panel"
+                aria-label="候補一覧"
+                hidden
+              ></section>
+            </div>
+            <p id="helper-text" class="helper-text">
+              入力すると候補が下に表示されます。上下キーでも選べます。
+            </p>
           </div>
 
           <div class="action-row">
-            <button type="submit" class="button button-primary" id="search-button">
-              検索
+            <button
+              type="submit"
+              class="button button-primary"
+              id="search-button"
+            >
+              この内容で表示
             </button>
-            <button type="button" class="button button-secondary" id="clear-button">
+            <button
+              type="button"
+              class="button button-secondary"
+              id="clear-button"
+            >
               クリア
             </button>
           </div>
         </form>
 
-        <p id="error-message" class="message message-error" aria-live="polite"></p>
-        <p id="copy-feedback" class="message message-feedback" aria-live="polite"></p>
+        <p
+          id="error-message"
+          class="message message-error"
+          aria-live="polite"
+        ></p>
+        <p
+          id="copy-feedback"
+          class="message message-feedback"
+          aria-live="polite"
+        ></p>
 
-        <section id="result-section" class="result-section" aria-live="polite" aria-label="検索結果"></section>
+        <section
+          id="result-section"
+          class="result-section"
+          aria-live="polite"
+          aria-label="検索結果"
+        ></section>
 
-        <footer class="card-footer">
-        </footer>
+        <footer class="card-footer"></footer>
       </section>
     </main>
 
