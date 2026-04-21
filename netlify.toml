@@ -8,6 +8,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/postal-suggest"
+  to = "/.netlify/functions/postal-suggest"
+  status = 200
+
+[[redirects]]
   from = "/api/address-search"
   to = "/.netlify/functions/address-search"
   status = 200

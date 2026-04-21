@@ -12,6 +12,7 @@
   const API_CONFIG = {
     endpoints: {
       postalSearch: '/api/postal-search',
+      postalSuggest: '/api/postal-suggest',
       addressSearch: '/api/address-search',
     },
     timeoutMs: 10000,
@@ -57,7 +58,8 @@
 
   const LIVE_SEARCH_CONFIG = {
     addressMinLength: 3,
-    postalLength: 7,
+    postalMinLength: 4,
+    postalExactLength: 7,
     debounceMs: 250,
     maxSuggestions: 8,
   };
@@ -189,6 +191,18 @@
     return response.results;
   }
 
+  async function fetchPostalSuggestions(postalCode, options = {}) {
+    const response = await requestJson(API_CONFIG.endpoints.postalSuggest, {
+      postalCode,
+    }, options);
+
+    if (!Array.isArray(response?.results)) {
+      throw new Error('invalid-response');
+    }
+
+    return response.results;
+  }
+
   async function fetchPostalCodesByAddress(address, options = {}) {
     const response = await requestJson(API_CONFIG.endpoints.addressSearch, {
       address,
@@ -261,7 +275,7 @@
     `;
   }
 
-  function renderSuggestions(list, keyword) {
+  function renderAddressSuggestions(list, keyword) {
     if (!list.length) {
       elements.suggestionSection.innerHTML = `
         <div class="suggestion-panel">
@@ -283,6 +297,43 @@
             <span class="suggestion-item-head">
               <span class="result-value">${escapeHtml(item.address)}</span>
               <span>${escapeHtml(item.formattedZipCode)}</span>
+              ${item.addressKana ? `<span class="result-kana">${escapeHtml(item.addressKana)}</span>` : ''}
+            </span>
+          </button>
+        `
+      )
+      .join('');
+
+    elements.suggestionSection.innerHTML = `
+      <div class="suggestion-panel">
+        <p class="suggestion-label">候補</p>
+        <div class="suggestion-list">${itemsHtml}</div>
+      </div>
+    `;
+  }
+
+  function renderPostalSuggestions(list, keyword) {
+    if (!list.length) {
+      elements.suggestionSection.innerHTML = `
+        <div class="suggestion-panel">
+          <p class="suggestion-label">候補</p>
+          <div class="suggestion-empty">${escapeHtml(`「${keyword}」に一致する候補はありません`)}</div>
+        </div>
+      `;
+      return;
+    }
+
+    const itemsHtml = list
+      .map(
+        (item, index) => `
+          <button
+            type="button"
+            class="suggestion-item"
+            data-suggestion-index="${index}"
+          >
+            <span class="suggestion-item-head">
+              <span class="result-value">${escapeHtml(item.formattedZipCode)}</span>
+              <span>${escapeHtml(item.address)}</span>
               ${item.addressKana ? `<span class="result-kana">${escapeHtml(item.addressKana)}</span>` : ''}
             </span>
           </button>
@@ -340,6 +391,7 @@
 
   function clearSuggestions() {
     elements.suggestionSection.innerHTML = '';
+    elements.suggestionSection.removeAttribute('data-suggestion-mode');
     elements.suggestionSection.removeAttribute('data-suggestions');
   }
 
@@ -521,8 +573,44 @@
         results.filter((item) => item.zipCode && item.address)
       ).slice(0, LIVE_SEARCH_CONFIG.maxSuggestions);
 
+      elements.suggestionSection.dataset.suggestionMode = 'address';
       elements.suggestionSection.dataset.suggestions = JSON.stringify(usableResults);
-      renderSuggestions(usableResults, keyword);
+      renderAddressSuggestions(usableResults, keyword);
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        return;
+      }
+
+      clearSuggestions();
+    } finally {
+      if (state.liveSearchAbortController === abortController) {
+        state.liveSearchAbortController = null;
+      }
+    }
+  }
+
+  async function handlePostalInputSearch(postalCode, requestId) {
+    cancelLiveSearch();
+    const abortController = new AbortController();
+    state.liveSearchAbortController = abortController;
+    renderSuggestionLoading();
+
+    try {
+      const results = await fetchPostalSuggestions(postalCode, {
+        signal: abortController.signal,
+      });
+
+      if (requestId !== state.liveSearchRequestId) {
+        return;
+      }
+
+      const usableResults = deduplicateResults(
+        results.filter((item) => item.zipCode && item.address)
+      ).slice(0, LIVE_SEARCH_CONFIG.maxSuggestions);
+
+      elements.suggestionSection.dataset.suggestionMode = 'postal';
+      elements.suggestionSection.dataset.suggestions = JSON.stringify(usableResults);
+      renderPostalSuggestions(usableResults, postalCode);
     } catch (error) {
       if (error.name === 'AbortError') {
         return;
@@ -587,17 +675,18 @@
       const normalizedPostalCode = normalizePostalCode(elements.input.value);
 
       cancelLiveSearch();
-      clearSuggestions();
 
       if (!normalizedPostalCode) {
         clearError();
         clearResult();
+        clearSuggestions();
         return;
       }
 
-      if (normalizedPostalCode.length < LIVE_SEARCH_CONFIG.postalLength) {
+      if (normalizedPostalCode.length < LIVE_SEARCH_CONFIG.postalMinLength) {
         clearError();
         clearResult();
+        clearSuggestions();
         return;
       }
 
@@ -606,9 +695,23 @@
       }
 
       clearError();
+      clearResult();
+      clearInputTimer();
+      state.liveSearchRequestId += 1;
+      const requestId = state.liveSearchRequestId;
+
+      if (normalizedPostalCode.length >= LIVE_SEARCH_CONFIG.postalExactLength) {
+        clearSuggestions();
+        state.inputTimerId = window.setTimeout(() => {
+          state.inputTimerId = null;
+          handlePostalSearch();
+        }, LIVE_SEARCH_CONFIG.debounceMs);
+        return;
+      }
+
       state.inputTimerId = window.setTimeout(() => {
         state.inputTimerId = null;
-        handlePostalSearch();
+        handlePostalInputSearch(normalizedPostalCode, requestId);
       }, LIVE_SEARCH_CONFIG.debounceMs);
       return;
     }
@@ -661,6 +764,7 @@
       return;
     }
 
+    const suggestionMode = elements.suggestionSection.dataset.suggestionMode;
     const suggestions = JSON.parse(elements.suggestionSection.dataset.suggestions || '[]');
     const selected = suggestions[Number(button.dataset.suggestionIndex)];
 
@@ -669,9 +773,17 @@
     }
 
     cancelLiveSearch();
-    elements.input.value = selected.address;
+    elements.input.value = suggestionMode === 'postal'
+      ? selected.formattedZipCode || selected.zipCode
+      : selected.address;
     clearSuggestions();
     clearError();
+
+    if (suggestionMode === 'postal') {
+      renderPostalResult(selected);
+      return;
+    }
+
     renderAddressResults([selected]);
   }
 

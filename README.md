@@ -18,9 +18,14 @@ address_search/
 ├── style.css
 ├── main.js
 ├── netlify.toml
+├── scripts/
+│   └── build_postal_suggest_data.rb
 ├── netlify/
+│   ├── data/
+│   │   └── postal-suggest-data.json
 │   └── functions/
 │       ├── _shared.js
+│       ├── postal-suggest.js
 │       ├── postal-search.js
 │       └── address-search.js
 └── README.md
@@ -33,6 +38,7 @@ address_search/
 - 検索結果のコピー
 - エラーメッセージ表示
 - クリア機能
+- 郵便番号 4 桁以上入力時の候補表示
 - モバイル / PC 両対応
 
 ## 検索モード
@@ -42,6 +48,7 @@ address_search/
 - 7 桁の郵便番号を受け付けます
 - `1000001` と `100-0001` の両方に対応します
 - 全角数字を半角に変換します
+- 4 桁以上入力すると前方一致候補を表示します
 - 検索結果は `100-0001` 形式で表示します
 
 ### 2. 住所から探す
@@ -121,11 +128,13 @@ address_search/
 ブラウザ側が呼ぶパス:
 
 - `/api/postal-search?postalCode=***`
+- `/api/postal-suggest?postalCode=***`
 - `/api/address-search?address=***`
 
 Netlify 上では以下の Functions に転送されます。
 
 - `netlify/functions/postal-search.js`
+- `netlify/functions/postal-suggest.js`
 - `netlify/functions/address-search.js`
 
 ## セキュリティ方針
@@ -164,6 +173,14 @@ Netlify 上では以下の Functions に転送されます。
 ## データ出典
 
 出典: 「位置参照情報ダウンロードサービス」（国土交通省）を加工して作成
+
+- 住所検索 / 完全一致郵便番号検索: HeartRails Geo API
+- 郵便番号候補検索: 日本郵便「住所の郵便番号（1レコード1行、UTF-8形式）」をもとに生成したローカルデータ
+
+## 補助スクリプト
+
+- `ruby scripts/build_postal_suggest_data.rb`
+  - 日本郵便の最新 UTF-8 郵便番号 ZIP を取得し、`netlify/data/postal-suggest-data.json` を再生成します
 
 ## 今後の拡張候補
 
